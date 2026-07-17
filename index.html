@@ -87,6 +87,21 @@
     width: 100%; height: 900px; border: 1px solid #E3DAC7; border-radius: 8px; background: #fff;
   }
   .hint { font-size: 12px; color: #7A7264; line-height: 1.6; }
+  .draft-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px; border: 1px solid #E3DAC7; border-radius: 6px; margin-bottom: 6px;
+    font-size: 12px; background: #fff;
+  }
+  .draft-item .draft-meta { color: #7A7264; }
+  .draft-item .draft-actions button { margin-left: 6px; }
+  #autosave-indicator { font-size: 11px; color: #7A9B6B; min-height: 14px; }
+  #publish-result { font-size: 13px; min-height: 20px; }
+  #publish-result.loading { color: #7A6A45; }
+  #publish-result.error { color: #A32D2D; }
+  .publish-link-row { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .publish-link-row input {
+    width: min(420px, 80vw); padding: 6px 8px; border-radius: 5px; border: 1px solid #E3DAC7; font-size: 12px;
+  }
 </style>
 </head>
 <body>
@@ -104,6 +119,10 @@
 
 <main>
   <div class="panel">
+    <div class="field">
+      <label>頁首標題</label>
+      <input type="text" id="header-title-input" value="本週精選酒款">
+    </div>
     <div class="url-row">
       <input type="text" id="url-input" placeholder="貼上商品頁網址，例如 https://www.lewine.com.tw/product/xxx/">
       <button class="primary" id="fetch-btn">抓取酒款</button>
@@ -118,6 +137,18 @@
     <button class="secondary" id="add-blank-btn">＋ 手動新增一款空白酒款</button>
   </div>
 
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <strong style="font-size:13px; color:#5C1A2B;">暫存區（存在這台電腦、這個瀏覽器裡）</strong>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="draft-name-input" placeholder="暫存檔名稱，例如：林小姐0717" style="padding:6px 8px; border-radius:5px; border:1px solid #E3DAC7; font-size:12px;">
+        <button class="secondary" id="save-draft-btn">存成新暫存檔</button>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:8px;">編輯內容會每隔幾秒自動存檔在這台電腦（換瀏覽器或清瀏覽器資料會消失），下次打開這個網址會自動還原上次的編輯進度。想保留多個版本可以用上面「存成新暫存檔」個別命名保存。</p>
+    <div id="draft-list" style="margin-top:10px;"></div>
+  </div>
+
   <div id="preview-wrap">
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -129,8 +160,13 @@
   </div>
 </main>
 
-<div class="bottom-actions">
-  <button class="primary" id="download-btn">下載完整 HTML（可直接寄送 EDM）</button>
+<div class="bottom-actions" style="flex-direction:column; gap:4px;">
+  <div id="autosave-indicator"></div>
+  <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+    <button class="primary" id="publish-btn">產生可分享的網址</button>
+    <button class="secondary" id="download-btn">下載完整 HTML（存到電腦）</button>
+  </div>
+  <div id="publish-result"></div>
 </div>
 
 <script>
@@ -142,6 +178,7 @@ const THEMES = {
   c: { name:'靛藍雅致', vars: { bgOuter:'#E8ECF1', bgCard:'#FBFCFE', borderCard:'#D3DCE6', heading:'#1D3A5F', nameColor:'#202832', bodyText:'#55636F', muted:'#9FAAB5', accent:'#B08D57', badge:'#2F4A63', grape:'#1D3A5F', tendril:'#B08D57', warningBg:'#E4E9EF' } },
 };
 let currentTheme = 'a';
+let headerTitle = '本週精選酒款';
 
 let products = [];
 
@@ -212,9 +249,10 @@ function priceHTML(p, v) {
     </td></tr></table>`;
 }
 
-function productBlockHTML(p, v, isLast) {
+function productBlockHTML(p, v, index, isLast) {
+  const breakStyle = index > 0 ? ' page-break-before: always; break-before: page;' : '';
   let block = `
-  <tr><td style="padding:24px 0 0; text-align:center;">${glassIcon(v.accent)}</td></tr>
+  <tr><td style="padding:24px 0 0; text-align:center;${breakStyle}">${glassIcon(v.accent)}</td></tr>
   <tr><td style="padding:6px 40px 4px; text-align:center;">
     <p style="margin:0; font-family:'Noto Serif TC', serif; font-weight:500; font-size:17px; line-height:1.5; color:${v.heading};">${esc(p.headline1)}</p>
     <p style="margin:2px 0 0; font-family:'Noto Serif TC', serif; font-weight:500; font-size:17px; line-height:1.5; color:${v.heading};">${esc(p.headline2)}</p>
@@ -253,16 +291,29 @@ function buildEmailHTML(themeKey) {
   const v = THEMES[themeKey].vars;
   const outerPattern = vinePatternURI(0.11, 0.10, 110);
   const cardPattern = vinePatternURI(0.045, 0.04, 92);
-  const productsHTML = products.map((p, i) => productBlockHTML(p, v, i === products.length - 1)).join('\n');
+  const productsHTML = products.map((p, i) => productBlockHTML(p, v, i, i === products.length - 1)).join('\n');
+
+  const firstImage = (products.find(p => p.image) || {}).image || '';
+  const descNames = products.map(p => p.name || p.en_name).filter(Boolean).join('、');
+  const ogDescription = descNames ? `${descNames} — 限時優惠中` : 'Le Wine 精選酒款限時優惠中';
 
   return `<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Le Wine 精選酒款 EDM</title>
+<title>${esc(headerTitle)}</title>
+<meta property="og:title" content="${esc(headerTitle)}">
+<meta property="og:description" content="${esc(ogDescription)}">
+${firstImage ? `<meta property="og:image" content="${esc(firstImage)}">` : ''}
+<meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  @media print {
+    body { background: #fff !important; }
+  }
+</style>
 </head>
 <body style="margin:0; padding:0; background-color:${v.bgOuter}; background-image:url(&quot;${outerPattern}&quot;); background-repeat:repeat; font-family:'Noto Sans TC', Arial, sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${v.bgOuter}; background-image:url(&quot;${outerPattern}&quot;); background-repeat:repeat; padding:32px 0;">
@@ -272,7 +323,7 @@ function buildEmailHTML(themeKey) {
     <img src="${LOGO_DATA_URI}" alt="Le Wine 知淳興業" width="86" style="display:block; width:86px; height:auto; margin:0 auto;">
   </td></tr>
   <tr><td style="padding:6px 40px 0; text-align:center;">
-    <p style="margin:0; font-family:'Noto Serif TC', serif; font-weight:700; font-size:22px; color:${v.heading}; letter-spacing:1px;">本週精選酒款</p>
+    <p style="margin:0; font-family:'Noto Serif TC', serif; font-weight:700; font-size:22px; color:${v.heading}; letter-spacing:1px;">${esc(headerTitle)}</p>
   </td></tr>
   <tr><td style="padding:14px 0 0;">${vineDivider()}</td></tr>
   ${productsHTML}
@@ -352,11 +403,13 @@ function renderCards() {
       } else {
         products[i][key] = el.value;
       }
+      scheduleAutosave();
     });
   });
   wrap.querySelectorAll('input[type=checkbox]').forEach(el => {
     el.addEventListener('change', () => {
       products[+el.dataset.i][el.dataset.key] = el.checked;
+      scheduleAutosave();
     });
   });
   wrap.querySelectorAll('button[data-act]').forEach(btn => {
@@ -366,6 +419,7 @@ function renderCards() {
       if (act === 'up' && i > 0) [products[i-1], products[i]] = [products[i], products[i-1]];
       if (act === 'down' && i < products.length - 1) [products[i+1], products[i]] = [products[i], products[i+1]];
       renderCards();
+      scheduleAutosave();
     });
   });
 }
@@ -373,7 +427,100 @@ function renderCards() {
 document.getElementById('add-blank-btn').addEventListener('click', () => {
   products.push(emptyProduct());
   renderCards();
+  scheduleAutosave();
 });
+
+// ---------- 自動儲存 / 暫存區 ----------
+const AUTOSAVE_KEY = 'lewine_edm_autosave';
+const DRAFTS_KEY = 'lewine_edm_drafts';
+let autosaveTimer = null;
+
+function currentSnapshot() {
+  return { headerTitle, theme: currentTheme, products, savedAt: Date.now() };
+}
+
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(currentSnapshot()));
+      const ind = document.getElementById('autosave-indicator');
+      if (ind) {
+        const t = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+        ind.textContent = `已自動儲存（${t}）`;
+      }
+    } catch (e) { /* localStorage 滿了或不可用，忽略 */ }
+  }, 800);
+}
+
+function loadSnapshot(snap) {
+  headerTitle = snap.headerTitle || '本週精選酒款';
+  currentTheme = snap.theme || 'a';
+  products = (snap.products && snap.products.length) ? snap.products : [emptyProduct()];
+  document.getElementById('header-title-input').value = headerTitle;
+  document.querySelectorAll('.swatch').forEach(b => b.classList.toggle('active', b.dataset.theme === currentTheme));
+  renderCards();
+  updatePreview();
+}
+
+function getDrafts() {
+  try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+
+function saveDrafts(list) {
+  localStorage.setItem(DRAFTS_KEY, JSON.stringify(list));
+}
+
+function renderDraftList() {
+  const wrap = document.getElementById('draft-list');
+  const drafts = getDrafts();
+  if (!drafts.length) {
+    wrap.innerHTML = '<p class="hint">目前沒有已命名的暫存檔。</p>';
+    return;
+  }
+  wrap.innerHTML = drafts.map(d => {
+    const dt = new Date(d.savedAt).toLocaleString('zh-TW', { hour12: false });
+    return `<div class="draft-item">
+      <span>${esc(d.name)} <span class="draft-meta">（${dt}）</span></span>
+      <span class="draft-actions">
+        <button class="secondary" data-draft-act="load" data-id="${d.id}">載入</button>
+        <button class="danger" data-draft-act="delete" data-id="${d.id}">刪除</button>
+      </span>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-draft-act]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const drafts2 = getDrafts();
+      const target = drafts2.find(d => String(d.id) === id);
+      if (btn.dataset.draftAct === 'load' && target) {
+        loadSnapshot(target);
+        scheduleAutosave();
+      } else if (btn.dataset.draftAct === 'delete') {
+        saveDrafts(drafts2.filter(d => String(d.id) !== id));
+        renderDraftList();
+      }
+    });
+  });
+}
+
+document.getElementById('save-draft-btn').addEventListener('click', () => {
+  const nameInput = document.getElementById('draft-name-input');
+  const name = nameInput.value.trim() || `暫存 ${new Date().toLocaleString('zh-TW', { hour12: false })}`;
+  const drafts = getDrafts();
+  drafts.unshift({ id: Date.now(), name, ...currentSnapshot() });
+  saveDrafts(drafts.slice(0, 30)); // 最多保留 30 筆，避免無限長大
+  nameInput.value = '';
+  renderDraftList();
+});
+
+document.getElementById('header-title-input').addEventListener('input', (e) => {
+  headerTitle = e.target.value;
+  updatePreview();
+  scheduleAutosave();
+});
+
 
 document.getElementById('fetch-btn').addEventListener('click', async () => {
   const input = document.getElementById('url-input');
@@ -399,6 +546,7 @@ document.getElementById('fetch-btn').addEventListener('click', async () => {
     status.className = 'ok';
     status.textContent = '已加入，請往下檢查並修正欄位內容（尤其是年份與價格）。';
     input.value = '';
+    scheduleAutosave();
   } catch (e) {
     status.className = 'error';
     status.textContent = e.message || '發生錯誤，請確認網址是否正確。';
@@ -410,10 +558,63 @@ document.querySelectorAll('.swatch').forEach(btn => {
     currentTheme = btn.dataset.theme;
     document.querySelectorAll('.swatch').forEach(b => b.classList.toggle('active', b === btn));
     updatePreview();
+    scheduleAutosave();
   });
 });
 
 document.getElementById('refresh-preview-btn').addEventListener('click', updatePreview);
+
+document.getElementById('publish-btn').addEventListener('click', async () => {
+  const result = document.getElementById('publish-result');
+  result.className = 'loading';
+  result.textContent = '發布中，請稍候…';
+  try {
+    const html = buildEmailHTML(currentTheme);
+    const resp = await fetch('/api/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html, title: headerTitle }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '發布失敗');
+    result.className = '';
+    result.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'publish-link-row';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.readOnly = true;
+    input.value = data.url;
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'secondary';
+    copyBtn.textContent = '複製連結';
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(data.url);
+        copyBtn.textContent = '已複製！';
+        setTimeout(() => { copyBtn.textContent = '複製連結'; }, 1500);
+      } catch (e) {
+        input.select();
+      }
+    });
+    const openBtn = document.createElement('a');
+    openBtn.href = data.url;
+    openBtn.target = '_blank';
+    openBtn.rel = 'noopener';
+    openBtn.className = 'secondary';
+    openBtn.style.textDecoration = 'none';
+    openBtn.style.display = 'inline-block';
+    openBtn.style.padding = '8px 14px';
+    openBtn.textContent = '開啟預覽';
+    row.appendChild(input);
+    row.appendChild(copyBtn);
+    row.appendChild(openBtn);
+    result.appendChild(row);
+  } catch (e) {
+    result.className = 'error';
+    result.textContent = e.message || '發布失敗，請稍後再試。';
+  }
+});
 
 document.getElementById('download-btn').addEventListener('click', () => {
   const html = buildEmailHTML(currentTheme);
@@ -426,10 +627,28 @@ document.getElementById('download-btn').addEventListener('click', () => {
   document.body.removeChild(a);
 });
 
-// 初始給一張空白卡片方便使用
-products.push(emptyProduct());
-renderCards();
-updatePreview();
+// 初始化：優先還原上次自動儲存的內容，否則從一張空白卡片開始
+(function init() {
+  let restored = false;
+  try {
+    const raw = localStorage.getItem(AUTOSAVE_KEY);
+    if (raw) {
+      const snap = JSON.parse(raw);
+      if (snap && snap.products && snap.products.length) {
+        loadSnapshot(snap);
+        const ind = document.getElementById('autosave-indicator');
+        if (ind) ind.textContent = '已還原上次編輯進度';
+        restored = true;
+      }
+    }
+  } catch (e) { /* 忽略解析錯誤 */ }
+  if (!restored) {
+    products.push(emptyProduct());
+    renderCards();
+    updatePreview();
+  }
+  renderDraftList();
+})();
 </script>
 </body>
 </html>
