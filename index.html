@@ -164,6 +164,7 @@
   <div id="autosave-indicator"></div>
   <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
     <button class="primary" id="publish-btn">產生可分享的網址</button>
+    <button class="secondary" id="pdf-btn">轉存 PDF（開啟列印視窗）</button>
     <button class="secondary" id="download-btn">下載完整 HTML（存到電腦）</button>
   </div>
   <div id="publish-result"></div>
@@ -563,6 +564,41 @@ document.querySelectorAll('.swatch').forEach(btn => {
 });
 
 document.getElementById('refresh-preview-btn').addEventListener('click', updatePreview);
+
+document.getElementById('pdf-btn').addEventListener('click', () => {
+  const result = document.getElementById('publish-result');
+  result.className = '';
+  result.textContent = '正在準備列印視窗…每款酒會各自獨立一頁，請在跳出的視窗中選擇「另存為 PDF」。';
+
+  const html = buildEmailHTML(currentTheme);
+  let printFrame = document.getElementById('pdf-print-frame');
+  if (printFrame) printFrame.remove();
+
+  printFrame = document.createElement('iframe');
+  printFrame.id = 'pdf-print-frame';
+  printFrame.style.position = 'fixed';
+  printFrame.style.right = '0';
+  printFrame.style.bottom = '0';
+  printFrame.style.width = '0';
+  printFrame.style.height = '0';
+  printFrame.style.border = '0';
+  document.body.appendChild(printFrame);
+
+  printFrame.onload = () => {
+    setTimeout(() => {
+      try {
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+        result.textContent = '列印視窗已開啟，請選擇「另存為 PDF」完成存檔。';
+      } catch (e) {
+        result.className = 'error';
+        result.textContent = '無法開啟列印視窗，請改用「產生可分享的網址」，打開該網址後手動按 Ctrl+P。';
+      }
+    }, 300); // 留一點時間讓字體與圖片載入
+  };
+
+  printFrame.srcdoc = html;
+});
 
 document.getElementById('publish-btn').addEventListener('click', async () => {
   const result = document.getElementById('publish-result');
