@@ -28,8 +28,10 @@ function matchMeta(html, prop) {
 }
 
 function extractH1(html) {
-  const m = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  return m ? stripTags(m[1]) : '';
+  const matches = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)].map(m => stripTags(m[1]));
+  const isSiteHeader = (t) => /^(知淳興業|Le\s?Wine)\s*(Le\s?Wine)?$/i.test((t || '').trim());
+  const candidate = matches.find(t => t && !isSiteHeader(t));
+  return candidate || matches[0] || '';
 }
 
 function splitEnZh(title) {
@@ -126,6 +128,8 @@ module.exports = async (req, res) => {
 
     const ogTitle = matchMeta(html, 'og:title');
     const h1 = extractH1(html);
+    // h1（已排除網站頁首「知淳興業 Le Wine」）通常同時包含中英文完整
+    // 標題，優先使用；缺漏時才退而求其次用 og:title（有時只有英文）。
     const titleSource = h1 || ogTitle;
     const { en, zh } = splitEnZh(titleSource);
 
