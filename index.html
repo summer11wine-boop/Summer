@@ -251,9 +251,14 @@ function priceHTML(p, v) {
 }
 
 function productBlockHTML(p, v, index, isLast) {
-  const breakStyle = index > 0 ? 'page-break-before: always; break-before: page;' : '';
+  // 第一款酒緊接在頁首下方，不強制「不可分割」，避免頁首擠壓空間時
+  // 把整款酒推到第二頁、留下第一頁大片空白；第 2 款以後本來就會強制
+  // 另起新頁（有完整一頁空間），才加上「不可分割」避免內容被從中間切開。
+  const breakStyle = index > 0
+    ? 'page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid;'
+    : '';
   let block = `
-  <tr><td style="padding:0; ${breakStyle} page-break-inside: avoid; break-inside: avoid;">
+  <tr><td style="padding:0; ${breakStyle}">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   <tr><td style="padding:24px 0 0; text-align:center;">${glassIcon(v.accent)}</td></tr>
   <tr><td style="padding:6px 40px 4px; text-align:center;">
