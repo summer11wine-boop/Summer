@@ -257,10 +257,14 @@ function productBlockHTML(p, v, index, isLast) {
   const breakStyle = index > 0
     ? 'page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid;'
     : '';
+  // 裝飾線放在每款酒「內部」最上方（跟該款酒綁在同一個不可分割區塊），
+  // 這樣不管是連續捲動閱讀、還是每款酒各自一頁的列印/PDF，裝飾線都
+  // 一定會穩穩出現在該款酒的最上面，不會孤立在錯的頁尾。
   let block = `
   <tr><td style="padding:0; ${breakStyle}">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-  <tr><td style="padding:24px 0 0; text-align:center;">${glassIcon(v.accent)}</td></tr>
+  <tr><td style="padding:${index === 0 ? '4px' : '0'} 0 0;">${vineDivider()}</td></tr>
+  <tr><td style="padding:20px 0 0; text-align:center;">${glassIcon(v.accent)}</td></tr>
   <tr><td style="padding:6px 40px 4px; text-align:center;">
     <p style="margin:0; font-family:'Noto Serif TC', serif; font-weight:500; font-size:17px; line-height:1.5; color:${v.heading};">${esc(p.headline1)}</p>
     <p style="margin:2px 0 0; font-family:'Noto Serif TC', serif; font-weight:500; font-size:17px; line-height:1.5; color:${v.heading};">${esc(p.headline2)}</p>
@@ -284,16 +288,15 @@ function productBlockHTML(p, v, index, isLast) {
     <p style="margin:0 0 4px; font-size:10px; font-weight:700; letter-spacing:2px; color:${v.accent}; text-transform:uppercase;">酒莊介紹</p>
     <p style="margin:0; font-size:12px; line-height:1.75; color:${v.bodyText};">${esc(p.winery)}</p>
   </td></tr>
-  <tr><td style="padding:12px 56px 0; text-align:center;">
+  <tr><td style="padding:16px 56px 0; text-align:center;">
+    <div style="width:24px; height:1px; background-color:${v.borderCard}; margin:0 auto 10px;"></div>
+    <p style="margin:0 0 4px; font-size:10px; font-weight:700; letter-spacing:2px; color:${v.accent}; text-transform:uppercase;">風味描述</p>
     <p style="margin:0; font-size:13px; line-height:1.8; color:${v.bodyText};">${esc(p.flavor)}</p>
   </td></tr>
   <tr><td style="padding:18px 40px 0; text-align:center;">${priceHTML(p, v)}</td></tr>
   </table>
   </td></tr>
   `;
-  if (!isLast) {
-    block += `<tr><td style="padding:24px 0 0;">${vineDivider()}</td></tr>`;
-  }
   return block;
 }
 
@@ -336,7 +339,6 @@ ${firstImage ? `<meta property="og:image" content="${esc(firstImage)}">` : ''}
   <tr><td style="padding:6px 40px 0; text-align:center;">
     <p style="margin:0; font-family:'Noto Serif TC', serif; font-weight:700; font-size:22px; color:${v.heading}; letter-spacing:1px;">${esc(headerTitle)}</p>
   </td></tr>
-  <tr><td style="padding:14px 0 0;">${vineDivider()}</td></tr>
   ${productsHTML}
   <tr><td style="padding:26px 0 0;">${vineDivider()}</td></tr>
   <tr><td style="padding:16px 24px; text-align:center; background-color:${v.warningBg};">
