@@ -98,6 +98,9 @@
   #publish-result { font-size: 13px; min-height: 20px; }
   #publish-result.loading { color: #7A6A45; }
   #publish-result.error { color: #A32D2D; }
+  #upload-publish-result { font-size: 13px; min-height: 20px; }
+  #upload-publish-result.loading { color: #7A6A45; }
+  #upload-publish-result.error { color: #A32D2D; }
   .publish-link-row { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
   .publish-link-row input {
     width: min(420px, 80vw); padding: 6px 8px; border-radius: 5px; border: 1px solid #E3DAC7; font-size: 12px;
@@ -157,6 +160,16 @@
       </div>
       <iframe id="preview-frame" style="margin-top:10px;"></iframe>
     </div>
+  </div>
+
+  <div class="panel">
+    <strong style="font-size:13px; color:#5C1A2B;">已經有做好的 HTML 檔案？直接上傳發布</strong>
+    <p class="hint" style="margin-top:4px;">適合：之前下載存在電腦裡的 EDM 檔案，或別人做好傳給您的檔案，不用再跑一趟 GitHub 上傳流程，直接在這裡拿到分享連結。（這裡上傳的檔案跟上面的編輯區是分開的，不會互相影響）</p>
+    <div class="url-row" style="margin-top:10px;">
+      <input type="file" id="upload-publish-input" accept=".html,text/html">
+      <button class="primary" id="upload-publish-btn">發布這個檔案</button>
+    </div>
+    <div id="upload-publish-result" style="margin-top:8px;"></div>
   </div>
 </main>
 
@@ -277,12 +290,11 @@ function priceHTML(p, v) {
 
 function productBgStyle(p, v) {
   if (!p.bgImage) return '';
-  // 蓋在該款酒區塊「上方 1/2」的刷淡橫幅：一開始就先蓋一層中等透明度的
-  // 底色，讓文字（大標）在圖片上也維持可讀；越往下（接近酒瓶照片與
-  // 內文的區域）越接近完全不透明的卡片底色，確保下半部完全乾淨，
-  // 不影響瓶照和文字的閱讀清晰度。
-  const fade = `linear-gradient(to bottom, ${hexToRgba(v.bgCard, 0.5)} 0%, ${hexToRgba(v.bgCard, 0.75)} 55%, ${v.bgCard} 100%)`;
-  return `background-image:${fade}, url(&quot;${p.bgImage}&quot;); background-size:100% 50%, 100% 50%; background-position:top center, top center; background-repeat:no-repeat, no-repeat;`;
+  // 用「固定高度」而不是「百分比」：表格背景的百分比高度在部分瀏覽器
+  // 算法不穩定，遇到內文較長的酒款容易整個跑掉。改成套用在一個高度
+  // 固定的橫幅區塊上（編號＋酒杯圖示＋大標），不管下方文字多長都不受影響。
+  const fade = `linear-gradient(to bottom, ${hexToRgba(v.bgCard, 0.68)} 0%, ${hexToRgba(v.bgCard, 0.85)} 55%, ${v.bgCard} 100%)`;
+  return `background-image:${fade}, url(&quot;${p.bgImage}&quot;); background-size:cover, cover; background-position:top center, top center; background-repeat:no-repeat, no-repeat;`;
 }
 
 function productBlockHTML(p, v, index, isLast) {
@@ -292,22 +304,25 @@ function productBlockHTML(p, v, index, isLast) {
   const breakStyle = index > 0
     ? 'page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid;'
     : '';
-  // 裝飾線放在每款酒「內部」最上方（跟該款酒綁在同一個不可分割區塊），
-  // 這樣不管是連續捲動閱讀、還是每款酒各自一頁的列印/PDF，裝飾線都
-  // 一定會穩穩出現在該款酒的最上面，不會孤立在錯的頁尾。
+  // 裝飾線獨立放在「背景圖區塊」外面，維持在乾淨底色上顯示；背景情境圖
+  // 從裝飾線正下方開始（top-half 橫幅），視覺上圖片上緣會剛好貼齊裝飾線。
   let block = `
   <tr><td style="padding:0; ${breakStyle}">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="${productBgStyle(p, v)}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   <tr><td style="padding:${index === 0 ? '4px' : '0'} 0 0;">${vineDivider()}</td></tr>
-  <tr><td style="padding:22px 0 0; text-align:center;">
+  </table>
+  <table role="presentation" width="100%" height="220" cellpadding="0" cellspacing="0" style="${productBgStyle(p, v)}">
+  <tr><td style="padding:22px 0 0; text-align:center; height:220px;">
     <span style="display:block; font-family:'Noto Serif TC', serif; font-size:44px; line-height:1; font-weight:700; color:${hexToRgba(v.accent, 0.22)};">${romanNumeral(index + 1)}</span>
+    <div style="padding-top:2px;">${glassIcon(v.accent)}</div>
+    <div style="padding:6px 40px 0;">
+      <p style="margin:0; font-family:'Noto Serif TC', serif; font-weight:700; font-size:17px; line-height:1.5; color:${v.heading};">${esc(p.headline1)}</p>
+      <p style="margin:2px 0 0; font-family:'Noto Serif TC', serif; font-weight:700; font-size:17px; line-height:1.5; color:${v.heading};">${esc(p.headline2)}</p>
+    </div>
+    <div style="padding-top:10px;"><div style="width:32px; height:2px; background-color:${v.accent}; margin:0 auto;"></div></div>
   </td></tr>
-  <tr><td style="padding:2px 0 0; text-align:center;">${glassIcon(v.accent)}</td></tr>
-  <tr><td style="padding:6px 40px 4px; text-align:center;">
-    <p style="margin:0; font-family:'Noto Serif TC', serif; font-weight:500; font-size:17px; line-height:1.5; color:${v.heading};">${esc(p.headline1)}</p>
-    <p style="margin:2px 0 0; font-family:'Noto Serif TC', serif; font-weight:500; font-size:17px; line-height:1.5; color:${v.heading};">${esc(p.headline2)}</p>
-  </td></tr>
-  <tr><td style="padding:10px 0 0;"><div style="width:32px; height:2px; background-color:${v.accent}; margin:0 auto;"></div></td></tr>
+  </table>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   <tr><td style="padding:20px 40px 4px; text-align:center;">
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr><td style="width:190px; height:190px; border-radius:50%; background:radial-gradient(circle, ${hexToRgba(v.accent,0.16)} 0%, ${hexToRgba(v.accent,0.05)} 55%, rgba(0,0,0,0) 75%); text-align:center; vertical-align:middle;">
       <img src="${esc(p.image)}" alt="${esc(p.en_name)} ${esc(p.name)}" width="140" style="display:inline-block; max-width:140px; height:auto; vertical-align:middle;">
@@ -318,6 +333,7 @@ function productBlockHTML(p, v, index, isLast) {
   </td></tr>
   <tr><td style="padding:2px 40px 0; text-align:center;">
     <p style="margin:0; font-family:'Noto Serif TC', serif; font-weight:700; font-size:19px; color:${v.nameColor};">${esc(p.name)}</p>
+
   </td></tr>
   <tr><td style="padding:10px 40px 0; text-align:center;">
     <span style="display:inline-block; background:${v.accent}; color:#FFFFFF; font-size:11px; font-weight:700; padding:3px 14px; letter-spacing:1.5px; border-radius:10px;">${esc(p.vintage)}</span>
@@ -732,16 +748,15 @@ document.getElementById('pdf-btn').addEventListener('click', () => {
   printFrame.srcdoc = html;
 });
 
-document.getElementById('publish-btn').addEventListener('click', async () => {
-  const result = document.getElementById('publish-result');
+async function publishHtmlAndShowResult(html, title, resultElId) {
+  const result = document.getElementById(resultElId);
   result.className = 'loading';
   result.textContent = '發布中，請稍候…';
   try {
-    const html = buildEmailHTML(currentTheme);
     const resp = await fetch('/api/publish', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html, title: headerTitle }),
+      body: JSON.stringify({ html, title }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || '發布失敗');
@@ -778,10 +793,51 @@ document.getElementById('publish-btn').addEventListener('click', async () => {
     row.appendChild(copyBtn);
     row.appendChild(openBtn);
     result.appendChild(row);
+    return true;
   } catch (e) {
     result.className = 'error';
     result.textContent = e.message || '發布失敗，請稍後再試。';
+    return false;
   }
+}
+
+document.getElementById('publish-btn').addEventListener('click', async () => {
+  const html = buildEmailHTML(currentTheme);
+  await publishHtmlAndShowResult(html, headerTitle, 'publish-result');
+});
+
+document.getElementById('upload-publish-input').addEventListener('change', () => {
+  document.getElementById('upload-publish-result').textContent = '';
+});
+
+document.getElementById('upload-publish-btn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('upload-publish-input');
+  const resultEl = document.getElementById('upload-publish-result');
+  const file = fileInput.files[0];
+  if (!file) {
+    resultEl.className = 'error';
+    resultEl.textContent = '請先選擇一個 HTML 檔案。';
+    return;
+  }
+  if (!/\.html?$/i.test(file.name)) {
+    resultEl.className = 'error';
+    resultEl.textContent = '請上傳 .html 檔案。';
+    return;
+  }
+  resultEl.className = 'loading';
+  resultEl.textContent = '讀取檔案中…';
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const html = ev.target.result;
+    const title = file.name.replace(/\.html?$/i, '');
+    const ok = await publishHtmlAndShowResult(html, title, 'upload-publish-result');
+    if (ok) fileInput.value = '';
+  };
+  reader.onerror = () => {
+    resultEl.className = 'error';
+    resultEl.textContent = '讀取檔案失敗，請確認檔案沒有損壞。';
+  };
+  reader.readAsText(file, 'utf-8');
 });
 
 document.getElementById('download-btn').addEventListener('click', () => {
